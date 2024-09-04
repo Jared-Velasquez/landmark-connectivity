@@ -37,7 +37,7 @@ def append_frequency_to_csv(frequency: Dict[str, List[int]], num_robots: int, cs
                 f.write(f",{count}")
             f.write("\n")
 
-def reindex_landmarks(pyfg_filepath: str, landmark_owner: Dict[str, str], output_dir: str) -> None:
+def reindex_landmarks(pyfg_filepath: str, num_robots: int, landmark_owner: Dict[str, str], output_dir: str) -> None:
     """Reindex the landmarks in the PyFG dataset based on the ownership of the landmarks.
 
     Args:
@@ -58,12 +58,25 @@ def reindex_landmarks(pyfg_filepath: str, landmark_owner: Dict[str, str], output
     # Reindexed PyFG dataset
     base = os.path.basename(pyfg_filepath)
     reindexed_pyfg_filepath = os.path.join(output_dir, f"{os.path.splitext(base)[0]}_with_ownership.pyfg")
+    print(landmark_owner)
+
+    # Reindex all owned landmarks starting from 0; unowned landmarks are not reindexed
+    # For example, landmark L1, L3, and L5 owned by A will be reindexed to LA0, LA1, and LA2
+    # landmark L0, L2, and L4 owned by B will be reindexed to LB0, LB1, and LB2
+    reindexed_landmark_owner: Dict[str, str] = {}
+    landmark_owner_count: List[int] = [0] * num_robots
+    for i, (landmark, owner) in enumerate(landmark_owner.items()):
+        owner_idx = get_robot_idx_from_char(owner)
+        print("owner idx: " + str(owner_idx))
+        reindexed_landmark_owner[landmark] = f"L{owner}{landmark_owner_count[owner_idx]}"
+        landmark_owner_count[owner_idx] += 1
+    print(reindexed_landmark_owner)
     
     # Replace all instances of the landmark with the new reindexed landmark
     with open(pyfg_filepath, "r") as f, open(reindexed_pyfg_filepath, "w") as reindexed_f:
         for line in f:
-            for landmark, owner in landmark_owner.items():
-                line = line.replace(landmark, f"L{owner}{landmark[1:]}")
+            for landmark, reindexed_landmark in reindexed_landmark_owner.items():
+                line = line.replace(landmark, reindexed_landmark)
             reindexed_f.write(line)
 
 
@@ -138,6 +151,7 @@ def assign_ownership_to_landmarks(
         os.makedirs(output_dir)
 
     logger.info(f"Assigning ownership of landmarks in {pyfg_filepath}")
+    pyfg_data: FactorGraphData = read_from_pyfg_file(pyfg_filepath)
     
     # Assign ownership to landmarks
     landmark_owner: Dict[str, str] = {}
@@ -156,7 +170,7 @@ def assign_ownership_to_landmarks(
         robot_idx = freq.index(max_freq)
         landmark_owner[landmark] = get_robot_char_from_number(robot_idx)
 
-    reindex_landmarks(pyfg_filepath, landmark_owner, output_dir)
+    reindex_landmarks(pyfg_filepath, pyfg_data.num_robots, landmark_owner, output_dir)
 
 def landmark_connectivity(args) -> None:
     """Recursively scan directory for PyFG files and analyze connectivity between landmarks and agents.
